@@ -1,0 +1,22 @@
+<w:p w14:paraId="3F196054" w14:textId="77777777" w:rsidR="0027116E" w:rsidRDefault="0027116E" w:rsidP="0027116E">
+  <w:pPr>
+    <w:spacing w:after="0"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Courier New" w:eastAsia="Times New Roman" w:hAnsi="Courier New" w:cs="Courier New"/>
+      <w:bCs/>
+      <w:sz w:val="20"/>
+      <w:szCs w:val="24"/>
+      <w:lang w:val="en-US" w:eastAsia="ru-RU"/>
+    </w:rPr>
+  </w:pPr>
+  <w:r w:rsidRPr="00B33795">
+    <w:rPr>
+      <w:rFonts w:ascii="Courier New" w:eastAsia="Times New Roman" w:hAnsi="Courier New" w:cs="Courier New"/>
+      <w:bCs/>
+      <w:sz w:val="20"/>
+      <w:szCs w:val="24"/>
+      <w:lang w:eastAsia="ru-RU"/>
+    </w:rPr>
+    <w:t xml:space="preserve">${judge}</w:t>
+  </w:r>
+</w:p>

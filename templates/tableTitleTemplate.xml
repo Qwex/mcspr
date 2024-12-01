@@ -1,0 +1,39 @@
+<w:p w14:paraId="3DCBC391" w14:textId="77777777" w:rsidR="00B33795" w:rsidRPr="00B36365" w:rsidRDefault="00B33795" w:rsidP="00121C9C">
+  <w:pPr>
+    <w:spacing w:after="0" w:line="240" w:lineRule="auto"/>
+    <w:outlineLvl w:val="1"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:eastAsia="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+      <w:b/>
+      <w:bCs/>
+      <w:sz w:val="24"/>
+      <w:szCs w:val="24"/>
+      <w:lang w:eastAsia="ru-RU"/>
+    </w:rPr>
+  </w:pPr>
+  <w:r>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:eastAsia="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+      <w:b/>
+      <w:bCs/>
+      <w:sz w:val="24"/>
+      <w:szCs w:val="24"/>
+      <w:lang w:eastAsia="ru-RU"/>
+    </w:rPr>
+    <w:t>${tableTitle}</w:t>
+  </w:r>
+</w:p>
+<w:p w14:paraId="08CEDDF2" w14:textId="77777777" w:rsidR="00121C9C" w:rsidRPr="00B36365" w:rsidRDefault="00121C9C" w:rsidP="00121C9C">
+  <w:pPr>
+    <w:spacing w:after="0" w:line="240" w:lineRule="auto"/>
+    <w:outlineLvl w:val="1"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:eastAsia="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+      <w:b/>
+      <w:bCs/>
+      <w:sz w:val="24"/>
+      <w:szCs w:val="24"/>
+      <w:lang w:eastAsia="ru-RU"/>
+    </w:rPr>
+  </w:pPr>
+</w:p>

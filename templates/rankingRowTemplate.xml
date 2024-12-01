@@ -1,0 +1,40 @@
+<w:p w:rsidR="0088442F" w:rsidRPr="0088442F" w:rsidRDefault="0088442F" w:rsidP="0088442F">
+  <w:pPr>
+    <w:tabs>
+      <w:tab w:val="left" w:pos="916"/>
+      <w:tab w:val="left" w:pos="1832"/>
+      <w:tab w:val="left" w:pos="2748"/>
+      <w:tab w:val="left" w:pos="3664"/>
+      <w:tab w:val="left" w:pos="4580"/>
+      <w:tab w:val="left" w:pos="5496"/>
+      <w:tab w:val="left" w:pos="6412"/>
+      <w:tab w:val="left" w:pos="7328"/>
+      <w:tab w:val="left" w:pos="8244"/>
+      <w:tab w:val="left" w:pos="9160"/>
+      <w:tab w:val="left" w:pos="10076"/>
+      <w:tab w:val="left" w:pos="10992"/>
+      <w:tab w:val="left" w:pos="11908"/>
+      <w:tab w:val="left" w:pos="12824"/>
+      <w:tab w:val="left" w:pos="13740"/>
+      <w:tab w:val="left" w:pos="14656"/>
+    </w:tabs>
+    <w:spacing w:after="0" w:line="240" w:lineRule="auto"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Courier New" w:eastAsia="Times New Roman" w:hAnsi="Courier New" w:cs="Courier New"/>
+      <w:color w:val="000000"/>
+      <w:sz w:val="20"/>
+      <w:szCs w:val="20"/>
+      <w:lang w:eastAsia="ru-RU"/>
+    </w:rPr>
+  </w:pPr>
+  <w:r w:rsidRPr="0088442F">
+    <w:rPr>
+      <w:rFonts w:ascii="Courier New" w:eastAsia="Times New Roman" w:hAnsi="Courier New" w:cs="Courier New"/>
+      <w:color w:val="000000"/>
+      <w:sz w:val="20"/>
+      <w:szCs w:val="20"/>
+      <w:lang w:eastAsia="ru-RU"/>
+    </w:rPr>
+    <w:t>${rankingRow}</w:t>
+  </w:r>
+</w:p>
