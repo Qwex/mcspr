@@ -5,10 +5,11 @@ import java.io.File
 import ru.qwex.mcspr.data.Csv
 import ru.qwex.mcspr.model.ProtocolItem.personallyTeamName
 import ru.qwex.mcspr.model.{Judge, ProtocolData, ProtocolItem, ProtocolItemFilter}
-import ru.qwex.mcspr.parsers.WinOrientTableParser
+import ru.qwex.mcspr.parsers.{AggregateParser, WinOrientTableParser}
 import ru.qwex.mcspr.renders.model.PageRowRender
 import ru.qwex.mcspr.utils.ZipUtils
 
+import scala.collection.mutable
 import scala.io.Source
 
 /**
@@ -240,7 +241,7 @@ object DocxRender {
     ).mkString("\n")
 
     val tableTitle = protocolData.tableTitle // "Девочки (до 13 лет) , 9 КП, 1,5 км Контрольное время 60 минут"
-    val pageDescription = if (layout.pagesCount > 2) Some(buildPageDescription(1, layout)) else None
+    val pageDescription = if (layout.pagesCount >= 2) Some(buildPageDescription(1, layout)) else None
     val renderedTableTitle = tableTitleTemplate.replace(
       "${tableTitle}", List(Some(tableTitle), pageDescription).flatten.mkString(", ")
     )
@@ -418,17 +419,17 @@ object DocxRender {
       val values = Seq(
         sequenceNumber.toString,
         protocolItem.fullName,
-        protocolItem.team,
+//        protocolItem.team,
 //        chooseTeam(protocolItem, teamWidth),
-//        if (
-//          protocolItem.team.length > teamWidth ||
-//            protocolItem.team.contains(personallyTeamName) ||
-//            protocolItem.team.isEmpty
-//        ) {
-//          personallyTeamName
-//        } else {
-//          protocolItem.team
-//        },
+        if (
+          protocolItem.team.length > teamWidth ||
+            protocolItem.team.contains(personallyTeamName) ||
+            protocolItem.team.isEmpty
+        ) {
+          personallyTeamName
+        } else {
+          protocolItem.team
+        },
         protocolItem.sportsCategory.getOrElse("б/р"),
         protocolItem.number,
         protocolItem.birthdate,
@@ -470,11 +471,11 @@ object DocxRender {
     val csvPath = "competitions.csv"
     val competitions = Csv.load(csvPath)
     //
-    val parser = new WinOrientTableParser()
+    val parser = AggregateParser.default // new WinOrientTableParser()
     //
     //    println(parser.parse(competitions.head))
 
-    val protocols = parser.parse(competitions.head)
+    val protocols = parser.parse(competitions.tail.head)
 
     val protocol = protocols.head
     //    val csvPath = "./competitions.csv"

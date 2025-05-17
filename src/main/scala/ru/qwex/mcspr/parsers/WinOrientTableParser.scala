@@ -1,7 +1,10 @@
 package ru.qwex.mcspr.parsers
 
-import org.jsoup.nodes.Element
-import ru.qwex.mcspr.data.{Applications, Competition, Csv}
+import java.io.File
+
+import org.jsoup.Jsoup
+import org.jsoup.nodes.{Document, Element}
+import ru.qwex.mcspr.data.{Application, Applications, Competition}
 import ru.qwex.mcspr.model._
 
 import scala.jdk.CollectionConverters._
@@ -11,16 +14,16 @@ import scala.util.Try
  *
  * @author Aleksander Marenkov <a.marenkov at itgrp.ru>
  */
-class WinOrientTableParser() {
+class WinOrientTableParser() extends Parser {
 
-  private val maxWinOrientTeamLength = 20
+  import WinOrientTableParser._
 
-  def parse(competition: Competition): Seq[ProtocolData] = {
-    val sourcePath = competition.file
+  private def readHtml(file: File): Document = {
+    Jsoup.parse(file)
+  }
 
-
-    val sources = WinOrientTableParserSource(sourcePath).get
-    val document = sources.document
+  def parse(competition: Competition, sources: ParserSource): Seq[ProtocolData] = {
+    val document = readHtml(sources.sourceFile)
 
     val tables = document.select("body>table").asScala.toList.drop(1)
 
@@ -32,15 +35,8 @@ class WinOrientTableParser() {
     //val judges = List(Judge("Лукин А.С.", "Главный судья", "СС2К"))
     val judges = judgesTable.map(parseJudges).getOrElse(List.empty) //  List(Judge("Лукин А.С.", "Главный судья", "СС2К"))
 
-    val protocolHeader = ProtocolHeader(
-      conductingOrganizations = competition.conductingOrganizations,
-      competition = competition.name,
-      date = Some(competition.date).filter(_.nonEmpty),
-      discipline = Some(competition.discipline).filter(_.nonEmpty),
-      disciplineCode = Some(competition.disciplineCode).filter(_.nonEmpty),
-      registry = Some(competition.registry).filter(_.nonEmpty),
-      place = Some(competition.place).filter(_.nonEmpty),
-    )
+
+    val protocolHeader = ProtocolHeader.from(competition)
 
     val protocolDatas = tableGroups.filter(_.length == 3).map {
       case List(distanceNameTable, distanceAttributesTable, protocolTable) =>
@@ -135,32 +131,9 @@ class WinOrientTableParser() {
 
         val teamShort = parsedRow.get(TypedColumn.team.typeName)
 
-        val application = {
-          applications
-            .findApplications(rawDistanceName, name)
-            .filter { application =>
-              teamShort
-                .map(_.toLowerCase)
-                .exists(application.team.toLowerCase.startsWith)
-            } match {
-            case application :: Nil => Some(application)
-            case applications =>
-              if (applications.map(_.team.toLowerCase).distinct.length == 1) {
-                applications.headOption
-              } else {
-                None
-              }
-          }
-        }
+        val application = findApplication(applications, rawDistanceName, name, teamShort)
 
-        val team = {
-          application
-            .map(_.team)
-            .orElse(teamShort.filter(_.length < maxWinOrientTeamLength))
-            .filterNot(_.matches(".*[a-zA-Z].*"))
-            .map(team => if (team.contains(ProtocolItem.personallyTeamName)) ProtocolItem.personallyTeamName else team)
-            .getOrElse(ProtocolItem.personallyTeamName)
-        }
+        val team = findTeam(application, teamShort)
 
         ProtocolItem.from(
           name = parsedRow.getOrElse(TypedColumn.fullName.typeName, ""),
@@ -198,9 +171,85 @@ class WinOrientTableParser() {
     case _ => result
   }
 
+  //  private def parseGroup(name: String): Group = {
+  //    val regex1 = "^([ЖМ])(\\d+|Э)(.*)$".r
+  //
+  //    def parse(name: String, originalName: String): Group = {
+  //      val maybe1 = try {
+  //        regex1.findAllIn(name).subgroups match {
+  //          case genderLabel :: "Э" :: _ =>
+  //            Genders.find(genderLabel).flatMap(_.buildAgeCategory(21)).map((_, false))
+  //          case genderLabel :: Age(age) :: postfix :: _ if List("Э", "А", "").contains(postfix) =>
+  //            Genders.find(genderLabel).flatMap(_.buildAgeCategory(age)).map((_, age < 16))
+  //          case _ => None
+  //        }
+  //      } catch {
+  //        case ex: IllegalStateException =>
+  //          None
+  //      }
+  //      maybe1
+  //        .orElse(Genders.find(name).flatMap(_.buildAgeCategory(21)).map((_, false)))
+  //        .map { case (category, isJunior) => Group(category, isJunior = isJunior) }
+  //        .getOrElse(Group(originalName, isOpen = true))
+  //    }
+  //
+  //    parse(name.trim.toUpperCase, name)
+  //  }
+
+}
+
+object WinOrientTableParser {
+
+  def findApplication(
+                       applications: Applications,
+                       rawDistanceName: String,
+                       name: String,
+                       teamShort: Option[String],
+                     ) = {
+    applications
+      .findApplications(rawDistanceName, name)
+      .filter { application =>
+        teamShort
+          .map(_.toLowerCase)
+          .exists(application.team.toLowerCase.startsWith)
+      } match {
+      case application :: Nil => Some(application)
+      case applications =>
+        if (applications.map(_.team.toLowerCase).distinct.length == 1) {
+          applications.headOption
+        } else {
+          None
+        }
+    }
+  }
+
+  private val maxWinOrientTeamLength = 20
+
+  def findTeam(application: Option[Application], teamShort: Option[String]): String = {
+    application
+      .map(_.team)
+      .orElse(teamShort.filter(_.length < maxWinOrientTeamLength))
+      .filterNot(_.matches(".*[a-zA-Z].*"))
+      .map(team => if (team.contains(ProtocolItem.personallyTeamName)) ProtocolItem.personallyTeamName else team)
+      .getOrElse(ProtocolItem.personallyTeamName)
+  }
+
+  def competition2ProtocolHeader(competition: Competition): ProtocolHeader = {
+    ProtocolHeader(
+      conductingOrganizations = competition.conductingOrganizations,
+      competition = competition.name,
+      date = Some(competition.date).filter(_.nonEmpty),
+      discipline = Some(competition.discipline).filter(_.nonEmpty),
+      disciplineCode = Some(competition.disciplineCode).filter(_.nonEmpty),
+      registry = Some(competition.registry).filter(_.nonEmpty),
+      place = Some(competition.place).filter(_.nonEmpty),
+    )
+  }
+
   object Genders {
     trait Gender {
       def mainAgeCategory: (Int, String)
+
       def minAge: Int
 
       def juniorCategories: List[(Int, String)]
@@ -239,6 +288,7 @@ class WinOrientTableParser() {
 
     object Man extends Gender {
       override def mainAgeCategory: (Int, String) = (21, "Мужчины")
+
       override def minAge = 11
 
       override def juniorCategories: List[(Int, String)] = List(
@@ -251,6 +301,7 @@ class WinOrientTableParser() {
 
     object Woman extends Gender {
       override def mainAgeCategory: (Int, String) = (21, "Женщины")
+
       override def minAge = 11
 
       override def juniorCategories: List[(Int, String)] = List(
@@ -284,25 +335,32 @@ class WinOrientTableParser() {
   private object Age {
 
     def unapply(age: String): Option[Int] = {
-      Try {age.toInt}.toOption
+      Try {
+        age.toInt
+      }.toOption
     }
 
   }
 
-  private def parseGroup(name: String): Group = {
+  def parseGroup(name: String): Group = {
     val regex1 = "^([ЖМ])(\\d+|Э)(.*)$".r
 
     def parse(name: String, originalName: String): Group = {
-      val maybe1 = regex1.findAllIn(name).subgroups match {
-        case genderLabel :: "Э" :: _ =>
-          Genders.find(genderLabel).flatMap(_.buildAgeCategory(21)).map((_, false))
-        case genderLabel :: Age(age) :: postfix :: _ if List("Э", "А", "").contains(postfix) =>
-          Genders.find(genderLabel).flatMap(_.buildAgeCategory(age)).map((_, age < 16))
-        case _ => None
+      val maybe1 = try {
+        regex1.findAllIn(name).subgroups match {
+          case genderLabel :: "Э" :: _ =>
+            Genders.find(genderLabel).flatMap(_.buildAgeCategory(21)).map((_, false))
+          case genderLabel :: Age(age) :: postfix :: _ if List("Э", "А", "").contains(postfix) =>
+            Genders.find(genderLabel).flatMap(_.buildAgeCategory(age)).map((_, age < 16))
+          case _ => None
+        }
+      } catch {
+        case ex: IllegalStateException =>
+          None
       }
       maybe1
         .orElse(Genders.find(name).flatMap(_.buildAgeCategory(21)).map((_, false)))
-        .map{case (category, isJunior) => Group(category, isJunior = isJunior)}
+        .map { case (category, isJunior) => Group(category, isJunior = isJunior) }
         .getOrElse(Group(originalName, isOpen = true))
     }
 

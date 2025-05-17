@@ -1,6 +1,6 @@
 package ru.qwex.mcspr.model
 
-import ru.qwex.mcspr.data.Application
+import ru.qwex.mcspr.data.{Application, Competition}
 import ru.qwex.mcspr.utils.RegexUtils
 
 import scala.annotation.tailrec
@@ -142,7 +142,7 @@ object ProtocolItemFilter {
 
   private val latinNameFilter: ProtocolItemFilter = ProtocolItemFilter(
     name = "Latin name filter",
-    filter = { protocolItem => protocolItem.fullName.matches(cyrillicRegexp) }
+    filter = { protocolItem => protocolItem.fullName.matches(cyrillicRegexp)}
   )
 
   def filter(protocolData: ProtocolData): ProtocolData = {
@@ -165,7 +165,21 @@ case class ProtocolHeader(
                            disciplineCode: Option[String],
                            registry: Option[String],
                            place: Option[String],
-                         ) {
+                         )
+
+object ProtocolHeader {
+
+  def from(competition: Competition): ProtocolHeader = {
+    ProtocolHeader(
+      conductingOrganizations = competition.conductingOrganizations,
+      competition = competition.name,
+      date = Some(competition.date).filter(_.nonEmpty),
+      discipline = Some(competition.discipline).filter(_.nonEmpty),
+      disciplineCode = Some(competition.disciplineCode).filter(_.nonEmpty),
+      registry = Some(competition.registry).filter(_.nonEmpty),
+      place = Some(competition.place).filter(_.nonEmpty),
+    )
+  }
 
 }
 

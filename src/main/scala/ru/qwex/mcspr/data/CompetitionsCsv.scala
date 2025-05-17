@@ -339,7 +339,7 @@ object Csv {
             registry = values.getOrElse(CompetitionColumnKey.registry, ""),
             place = values.getOrElse(CompetitionColumnKey.place, ""),
             file = file,
-            saveAs = values.getOrElse(CompetitionColumnKey.saveAs, file),
+            saveAs = values.get(CompetitionColumnKey.saveAs).map(_.trim).filter(_.nonEmpty).getOrElse(file),
             shortName = values.getOrElse(CompetitionColumnKey.shortName, name),
           )
           readCompetitions(restLines, columns, conductingOrganizations, judges, result :+ competition)

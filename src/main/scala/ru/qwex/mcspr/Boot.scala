@@ -6,7 +6,7 @@ import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
 import ru.qwex.mcspr.data.Csv
 import ru.qwex.mcspr.model.ProtocolItemFilter
-import ru.qwex.mcspr.parsers.WinOrientTableParser
+import ru.qwex.mcspr.parsers.AggregateParser
 import ru.qwex.mcspr.renders.DocxRender
 import ru.qwex.mcspr.utils.ZipUtils
 
@@ -18,7 +18,7 @@ import scala.util.Try
  * @author Aleksander Marenkov <a.marenkov at itgrp.ru>
  */
 object Boot {
-  private val version = "0.0.1.3"
+  private val version = "0.0.1.4.2"
 
   private val inputDocx = "templates/document"
 
@@ -33,25 +33,29 @@ object Boot {
     }
 
     try {
-      val inputDocxFile = new File(inputDocx)
+      val inputDocxFile = new File(System.getProperty("user.dir"), inputDocx)
       if (!inputDocxFile.exists() || !inputDocxFile.isDirectory) {
         throw new Exception(s"Потеряны файлы шаблона docx документа: ${inputDocxFile.getAbsolutePath}")
       }
 
       val fileName = parsedArgs.fileName
-        .getOrElse {throw new Exception("Не передан аргумент пути файла к списку соревнований!")}
+        .getOrElse {
+          throw new Exception("Не передан аргумент пути файла к списку соревнований!")
+        }
       val file = new File(fileName)
 
       if (!file.isFile) {
         throw new Exception("Список соревнований должен быть файлом!")
       }
 
-      val competitions = Try{Csv.load(file.getPath)}.recover {
+      val competitions = Try {
+        Csv.load(file.getPath)
+      }.recover {
         case ex: Throwable =>
           throw new Exception(s"Не удалось прочитать файл списка соревнований: ${ex.getMessage}")
       }.getOrElse(List.empty)
 
-      val parser = new WinOrientTableParser()
+      val parser = AggregateParser.default
 
       for {
         competition <- competitions
@@ -66,8 +70,9 @@ object Boot {
               parser.parse(competition)
             }.recover {
               case ex: Throwable =>
+                ex.printStackTrace()
                 throw new Exception(s"Не удалось прочитать файл с протоколами!")
-            }.getOrElse(Seq.empty)
+            }.get //.getOrElse(Seq.empty)
 
             DocxRender.render(
               protocols.filterNot(_.distance.isOpen)
@@ -127,6 +132,7 @@ object Boot {
   private def printVersion(): Unit = {
     println(s"Version: $version")
   }
+
 
 }
 

@@ -62,7 +62,7 @@ object LayoutCalculator {
 
 
     val (judgeHeight1, judgeHeight2) = {
-      val judgeHeight = ((protocolData.footer.judges.length * 2) - 1) * styles(5)._2
+      val judgeHeight = ((protocolData.footer.judges.length * 2) - 1 + 5) * styles(5)._2
       (judgeHeight + 2 * styles(5)._2, judgeHeight)
     }
 

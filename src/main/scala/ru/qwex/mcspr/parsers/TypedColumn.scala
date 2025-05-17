@@ -164,14 +164,22 @@ object TypedColumn {
   }
 
 
-  private val successResultRegex: String = "\\d\\d:\\d\\d:\\d\\d"
+  private val successResultRegex1: String = "\\d\\d:\\d\\d:\\d\\d"
+  private val successResultRegex2: String = "((\\d)?\\d:)?\\d\\d:\\d\\d"
 
   private def resultTransform: String => String =  normalize(_) { str =>
-    if (str.matches(successResultRegex)) {
+    if (str.matches(successResultRegex1)) {
       str
+    } else if (str.matches(successResultRegex2)) {
+      val (h, m, s) = str.split(":").toList match {
+        case h :: m :: s :: _ => ("%2s".format(h).replaceAll(" ", "0"), m, s)
+        case m :: s :: _ =>  ("00", m, s)
+      }
+      s"$h:$m:$s"
     } else {
       s"п.п.$str"
     }
+
   }
 
 }

@@ -22,6 +22,11 @@ lazy val root = (project in file("."))
     libraryDependencies += "com.github.tototoshi" %% "scala-csv" % "2.0.0",
 //    libraryDependencies += "fr.opensagres.xdocreport" % "fr.opensagres.odfdom.converter.pdf" % "2.1.0",
 //    libraryDependencies += "fr.opensagres.xdocreport" % "fr.opensagres.poi.xwpf.converter.pdf" % "2.0.6",
+    libraryDependencies += "org.apache.pdfbox" % "pdfbox" % "2.0.32",
+    libraryDependencies += "net.sf.cssbox" % "pdf2dom" % "2.0.3",
+    // https://mvnrepository.com/artifact/com.itextpdf/itextpdf
+//    libraryDependencies += "com.typesafe.play" %% "play-json" % "2.9.3",
+    libraryDependencies += "com.itextpdf" % "itextpdf" % "5.5.13.4",
       assembly / mainClass := Some("ru.qwex.mcspr.Boot"),
     assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "io.netty.versions.properties", _*) => MergeStrategy.first
@@ -33,6 +38,7 @@ lazy val root = (project in file("."))
       case PathList("org", "apache", "tika", "mime", "custom-mimetypes.xml", _*) => MergeStrategy.first
       case x if x.endsWith("module-info.class") => MergeStrategy.discard
       case x if x.endsWith(".proto") => MergeStrategy.discard
+
 
       case x =>
         val oldStrategy = (assembly / assemblyMergeStrategy).value
