@@ -106,6 +106,7 @@ class WinOrientTableParser() extends Parser {
       controlTime = distanceAttributes.get("контрольное время"),
       isOpen = group.isOpen,
       isJunior = group.isJunior,
+      maybeMaxAge = group.maybeMaxAge
     )
   }
 
@@ -289,7 +290,7 @@ object WinOrientTableParser {
     object Man extends Gender {
       override def mainAgeCategory: (Int, String) = (21, "Мужчины")
 
-      override def minAge = 11
+      override def minAge = 10
 
       override def juniorCategories: List[(Int, String)] = List(
         14 -> "Мальчики",
@@ -302,7 +303,7 @@ object WinOrientTableParser {
     object Woman extends Gender {
       override def mainAgeCategory: (Int, String) = (21, "Женщины")
 
-      override def minAge = 11
+      override def minAge = 10
 
       override def juniorCategories: List[(Int, String)] = List(
         14 -> "Девочки",
@@ -323,7 +324,7 @@ object WinOrientTableParser {
     private val labelToGender: Map[String, Gender] = Map(
       "Ж" -> Woman,
       "М" -> Man,
-      "ЖЕНИЩНЫ" -> Woman,
+      "ЖЕНЩИНЫ" -> Woman,
       "МУЖЧИНЫ" -> Man,
     )
 
@@ -349,9 +350,9 @@ object WinOrientTableParser {
       val maybe1 = try {
         regex1.findAllIn(name).subgroups match {
           case genderLabel :: "Э" :: _ =>
-            Genders.find(genderLabel).flatMap(_.buildAgeCategory(21)).map((_, false))
+            Genders.find(genderLabel).flatMap(_.buildAgeCategory(21)).map((_, false, 21))
           case genderLabel :: Age(age) :: postfix :: _ if List("Э", "А", "").contains(postfix) =>
-            Genders.find(genderLabel).flatMap(_.buildAgeCategory(age)).map((_, age < 16))
+            Genders.find(genderLabel).flatMap(_.buildAgeCategory(age)).map((_, age < 16, age))
           case _ => None
         }
       } catch {
@@ -359,8 +360,8 @@ object WinOrientTableParser {
           None
       }
       maybe1
-        .orElse(Genders.find(name).flatMap(_.buildAgeCategory(21)).map((_, false)))
-        .map { case (category, isJunior) => Group(category, isJunior = isJunior) }
+        .orElse(Genders.find(name).flatMap(_.buildAgeCategory(21)).map((_, false, 21)))
+        .map { case (category, isJunior, age) => Group(category, isJunior = isJunior, maybeAge = Some(age)) }
         .getOrElse(Group(originalName, isOpen = true))
     }
 

@@ -2,12 +2,13 @@ package ru.qwex.mcspr
 
 import java.io.File
 
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
 import ru.qwex.mcspr.data.Csv
 import ru.qwex.mcspr.model.ProtocolItemFilter
 import ru.qwex.mcspr.parsers.AggregateParser
-import ru.qwex.mcspr.renders.DocxRender
+import ru.qwex.mcspr.renders.{DocxRender, LayoutCalculator}
 import ru.qwex.mcspr.utils.ZipUtils
 
 import scala.util.Try
@@ -18,7 +19,7 @@ import scala.util.Try
  * @author Aleksander Marenkov <a.marenkov at itgrp.ru>
  */
 object Boot {
-  private val version = "0.0.1.4.2"
+  private val version = "0.0.1.6"
 
   private val inputDocx = "templates/document"
 
@@ -94,6 +95,7 @@ object Boot {
           }
         } catch {
           case ex: Throwable =>
+            ex.printStackTrace()
             println(s"Ошибка: ${ex.getMessage}")
         }
 
@@ -133,6 +135,7 @@ object Boot {
     println(s"Version: $version")
   }
 
+  def config = ConfigFactory.load()
 
 }
 

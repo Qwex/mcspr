@@ -27,6 +27,7 @@ lazy val root = (project in file("."))
     // https://mvnrepository.com/artifact/com.itextpdf/itextpdf
 //    libraryDependencies += "com.typesafe.play" %% "play-json" % "2.9.3",
     libraryDependencies += "com.itextpdf" % "itextpdf" % "5.5.13.4",
+    libraryDependencies += "com.typesafe" % "config" % "1.4.2",
       assembly / mainClass := Some("ru.qwex.mcspr.Boot"),
     assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "io.netty.versions.properties", _*) => MergeStrategy.first

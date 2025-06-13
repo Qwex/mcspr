@@ -363,7 +363,7 @@ object DocxRender {
 
     val teamColumnWidth = Math.min(maxTeamWidth, maxFullNameAndTeamWidth - maxFullNameWidth)
     val fullNameColumnWidth = maxFullNameAndTeamWidth - teamColumnWidth
-    val birthDateColumnName = if (protocol.table.map(_.birthdate.length).max > 4) {
+    val birthDateColumnName = if (protocol.table.nonEmpty && protocol.table.map(_.birthdate.length).max > 4) {
       birthDayColumnName
     } else {
       birthYearColumnName

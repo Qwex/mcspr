@@ -38,11 +38,11 @@ case class ProtocolData(
     s"лист $pageNum, всего листов $pagesCount"
   }
 
-  def additionalPageHeader(pageNum: Int, pagesCount: Int):String = {
+  def additionalPageHeader(pageNum: Int, pagesCount: Int): String = {
 
     val competition = header.competition
     val date = header.date
-    val group = distance.name.toLowerCase().replaceAll("\\(|\\)", "")
+    val group = distance.name.toLowerCase()//.replaceAll("\\(|\\)", "")
     val pageDescription = buildPageDescription(pageNum, pagesCount)
     List(
       Some(competition),
@@ -74,7 +74,7 @@ case class ProtocolData(
         None
       }
     },
-    distance.controlTime.flatMap(controlTime => Try(controlTime.trim.toInt).toOption).map { iControlTime =>
+    distance.controlTime.flatMap(controlTime => Try(controlTime.trim.toInt).toOption.filter(_ > 0)).map { iControlTime =>
       s"Контрольное время $iControlTime ${printMinutes(iControlTime % 100)}"
     }
   ).flatten.mkString(", ")
@@ -142,12 +142,30 @@ object ProtocolItemFilter {
 
   private val latinNameFilter: ProtocolItemFilter = ProtocolItemFilter(
     name = "Latin name filter",
-    filter = { protocolItem => protocolItem.fullName.matches(cyrillicRegexp)}
+    filter = { protocolItem => protocolItem.fullName.matches(cyrillicRegexp) }
   )
+
+  private def yearOfBirthFilter(protocolData: ProtocolData): Option[ProtocolItemFilter] = {
+    protocolData
+      .distance
+      .maybeMaxAge
+      .map(maxAge =>
+        ProtocolItemFilter(
+          name = "Year of birth filter",
+          filter = { protocolItem =>
+            protocolItem
+              .maybeYearOfBirth
+              .flatMap(yearOfBirth => protocolData.header.maybeYear.map(_ - yearOfBirth))
+              .exists(_ <= maxAge)
+          },
+        )
+      )
+  }
 
   def filter(protocolData: ProtocolData): ProtocolData = {
     protocolData.filter(
       List(
+        yearOfBirthFilter(protocolData),
         patronymicAndBirthdayFilter(protocolData),
         Some(outOfCompetitionFilter),
         Some(latinNameFilter)
@@ -165,6 +183,7 @@ case class ProtocolHeader(
                            disciplineCode: Option[String],
                            registry: Option[String],
                            place: Option[String],
+                           maybeYear: Option[Int] = None,
                          )
 
 object ProtocolHeader {
@@ -178,6 +197,7 @@ object ProtocolHeader {
       disciplineCode = Some(competition.disciplineCode).filter(_.nonEmpty),
       registry = Some(competition.registry).filter(_.nonEmpty),
       place = Some(competition.place).filter(_.nonEmpty),
+      maybeYear = competition.maybeYear,
     )
   }
 
@@ -201,17 +221,25 @@ case class ProtocolItem(
                          hasBirthday: Boolean,
                          outOfCompetition: Boolean,
                          application: Option[Application] = None,
+                         maybeYearOfBirth: Option[Int] = None,
                        )
 
 object ProtocolItem {
 
   val personallyTeamName: String = "лично"
 
-  private val commentRegExp: Regex = s"(\\d\\d\\.\\d\\d\\.*)\\s([${RegexUtils.cyrillicSymbols}]+)".r
+  private val patronymicFilterRegex: Regex = s"[${RegexUtils.cyrillicSymbols}]+-?[${RegexUtils.cyrillicSymbols}]+".r
+
+  def patronymicFilter(patronymic: String): Boolean = {
+    patronymicFilterRegex.matches(patronymic)
+  }
+
+  //  private val commentRegExp: Regex = s"(\\d\\d\\.\\d\\d\\.*)\\s([${RegexUtils.cyrillicSymbols}]+)".r
+  private val commentRegExp: Regex = s"(\\d\\d\\.\\d\\d\\.*)(.*)".r
 
   private def parseComment(comment: Option[String]): (Option[String], Option[String]) = comment.map(_.trim).flatMap {
     case commentRegExp(birthday, patronymic) =>
-      Some((Some(birthday.stripSuffix(".")), Some(patronymic)))
+      Some((Some(birthday.stripSuffix(".")), Some(patronymic).map(_.trim).filter(patronymicFilter)))
     case _ => None
   }.getOrElse((None, None))
 
@@ -228,13 +256,18 @@ object ProtocolItem {
           ): ProtocolItem = {
 
 
-    val (maybeBirthday, maybePatronymic) = parseComment(comment)
+    val (maybeCommentBirthday, maybeCommentPatronymic) = parseComment(comment)
 
-    val birthdate: String = maybeBirthday.map(birthday => s"$birthday.$yearOfBirth").getOrElse(yearOfBirth)
+    val maybeBirthdate = application.flatMap(_.birthdate)
+    val birthdate: String = maybeCommentBirthday
+      .map(birthday => s"$birthday.$yearOfBirth")
+      .orElse(maybeBirthdate)
+      .getOrElse(yearOfBirth)
+    val maybePatronymic = maybeCommentPatronymic.orElse(application.flatMap(_.patronymic))
     val fullName: String = maybePatronymic.map(patronymic => s"$name $patronymic").getOrElse(name)
 
     val hasPatronymic = maybePatronymic.nonEmpty
-    val hasBirthday = maybeBirthday.nonEmpty
+    val hasBirthday = maybeCommentBirthday.nonEmpty || maybeBirthdate.nonEmpty
 
     val parsedPlace: Option[Int] = {
       val _place = place.replaceAll("[^0-9]", "")
@@ -244,6 +277,10 @@ object ProtocolItem {
         Some(_place.toInt)
       }
     }
+
+    val maybeYearOfBirth = Try {
+      yearOfBirth.toInt
+    }.toOption
 
     ProtocolItem(
       fullName = fullName,
@@ -258,6 +295,7 @@ object ProtocolItem {
       hasBirthday = hasBirthday,
       outOfCompetition = outOfCompetitionPLaces.contains(place.toLowerCase),
       application = application,
+      maybeYearOfBirth = maybeYearOfBirth,
     )
   }
 
@@ -284,10 +322,20 @@ case class Distance(
                      controlTime: Option[String],
                      isOpen: Boolean = false,
                      isJunior: Boolean = false,
+                     maybeMaxAge: Option[Int] = None,
                    )
 
 case class Group(
                   name: String,
                   isOpen: Boolean = false,
                   isJunior: Boolean = false,
-                )
+                  maybeAge: Option[Int] = None,
+                ) {
+
+  val maybeMaxAge: Option[Int] = {
+    Some(39)
+      .filter(_ => maybeAge.contains(21) && !isOpen)
+      .orElse(maybeAge)
+  }
+
+}

@@ -2,6 +2,7 @@ package ru.qwex.mcspr.data
 
 import ru.qwex.mcspr.data.Applications.buildIndexKey
 import ru.qwex.mcspr.data.CSVReaderUtils.{Line, Lines}
+import ru.qwex.mcspr.model.ProtocolItem.patronymicFilter
 
 /**
  *
@@ -14,8 +15,11 @@ object ApplicationsCsv {
     val surname: String = "фамилия"
     val name: String = "имя"
     val team: String = "команда"
+    val patronymic: String = "отчество"
+    val birthdate = "дата рожд."
 
-    val all: Set[String] = Set(group, surname, name, team)
+    val required: Set[String] = Set(group, surname, name, team)
+    //    val all: Set[String] = Set(group, surname, name, team, patronymic)
   }
 
   private val encoding = "UTF8"
@@ -29,7 +33,7 @@ object ApplicationsCsv {
     def unapply(columnsLine: Line): Option[Line] = {
       val columns = columnsLine.map(_.trim.toLowerCase)
 
-      if (ColumnKey.all.subsetOf(columns.toSet)) {
+      if (ColumnKey.required.subsetOf(columns.toSet)) {
         Some(columns)
       } else {
         None
@@ -48,6 +52,8 @@ object ApplicationsCsv {
             name = map.getOrElse(ColumnKey.name, ""),
             surname = map.getOrElse(ColumnKey.surname, ""),
             team = map.getOrElse(ColumnKey.team, ""),
+            patronymic = map.get(ColumnKey.patronymic).filter(patronymicFilter),
+            birthdate = map.get(ColumnKey.birthdate).filter(_.nonEmpty)
           )
         }
         new Applications(applications)
@@ -101,4 +107,6 @@ case class Application(
                         name: String,
                         surname: String,
                         team: String,
+                        patronymic: Option[String],
+                        birthdate: Option[String],
                       )

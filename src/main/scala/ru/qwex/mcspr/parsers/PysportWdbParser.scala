@@ -111,7 +111,7 @@ class PysportWdbParser extends Parser {
               qualName <- Some(qualificationName(qual)).filter(_.nonEmpty)
               percent <- r.getFieldSafe[Int](percentField).filter(_ > 0)
               time <- r.getFieldSafe[Int](maxTimeField).map(msToTimeString)
-            } yield s"$qualName - ${percent}% - ${time}"
+            } yield s"${qualName.padTo(maxQualificationNameLength, ' ')} - ${percent}% - ${time}"
           }
           .toList
         Ranking(List(scoresLine) ++ rankLines)
@@ -148,15 +148,16 @@ class PysportWdbParser extends Parser {
     val course = group.getField[JsValue](courseField)
     val length = course.getField[Int](lengthField)
     val kp = course.getField[List[JsValue]](controlsField).length
-    val controlTime = group.getField[Int](maxTimeField)
+    val controlTime = course.getFieldSafe[Int](timeLimitField).filter(_ > 0)
     val _group = WinOrientTableParser.parseGroup(group.getField[String](nameField))
     Distance(
       name = _group.name,
       length = length.toString,
       kp = kp,
-      controlTime = Some(controlTime.toString),
+      controlTime = controlTime.map(_.toString),
       isOpen = _group.isOpen,
       isJunior = _group.isJunior,
+      maybeMaxAge = _group.maybeMaxAge,
     )
   }
 
@@ -185,6 +186,7 @@ object PysportWdbParser {
   val lengthField: String = "length"
   val controlsField: String = "controls"
   val maxTimeField: String = "max_time"
+  val timeLimitField: String = "time_limit"
   val surnameField: String = "surname"
   val qualField: String = "qual"
   val bibField: String = "bib"
@@ -374,8 +376,10 @@ object PysportWdbParser {
 
   private val statusPriorities: Seq[Int] = Seq(8, 4, 3, 5, 13)
 
-  private def qualificationName(qualificatio: Int): String = {
-    qualificationMap.getOrElse(qualificatio, qualificationMap(0))
+  private val maxQualificationNameLength = qualificationMap.values.map(_.length).max
+
+  private def qualificationName(qualification: Int): String = {
+    qualificationMap.getOrElse(qualification, qualificationMap(0))
   }
 
   private def getStatusPriority(status: Int): Int = {

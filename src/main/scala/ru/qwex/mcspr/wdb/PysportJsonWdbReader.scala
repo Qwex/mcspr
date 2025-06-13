@@ -1,7 +1,6 @@
 package ru.qwex.mcspr.wdb
 
 import java.io.{File, FileInputStream}
-import java.time.Duration
 
 import play.api.libs.json.{JsValue, Json}
 
@@ -24,11 +23,11 @@ object PysportJsonWdbReader {
     val command = source.getLines().mkString(" ").trim
     source.close()
 
-//    println(s"${command} \"${wdbFilePath}\" \"${tmpJsonName}\"")
+    //    println(s"${command} \"${wdbFilePath}\" \"${tmpJsonName}\"")
 
     s"${command} \"${wdbFilePath}\" \"${tmpJsonName}\"".!!
     val json = Json.parse(new FileInputStream(tmpJsonName))
-//    new File(tmpJsonName).delete()
+    //    new File(tmpJsonName).delete()
     json
   }
 

@@ -7,6 +7,7 @@ import ru.qwex.mcspr.data.format.ExcelFormat
 import ru.qwex.mcspr.model.Judge
 
 import scala.annotation.tailrec
+import scala.util.matching.Regex
 
 /**
  *
@@ -353,6 +354,12 @@ object Csv {
 
 }
 
+object Competition {
+
+  val yearRegex: Regex = "\\d\\d\\d\\d".r
+
+}
+
 case class Competition(
                         conductingOrganizations: List[String],
                         judges: List[Judge],
@@ -365,4 +372,8 @@ case class Competition(
                         place: String,
                         file: String,
                         saveAs: String,
-                      )
+                      ) {
+
+  val maybeYear: Option[Int] = Competition.yearRegex.findFirstIn(date).map(_.toInt)
+
+}
