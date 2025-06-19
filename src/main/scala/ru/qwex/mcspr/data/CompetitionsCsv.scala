@@ -32,13 +32,13 @@ object Csv {
 
     //        val lines = load("competitions.csv")
 
-//    val encoding = "cp1251"
+    //    val encoding = "cp1251"
     //
     //        val reader = CSVReader.open(new File("competitions.csv"), encoding)
     //
     //    val lines = reader.all().filterNot(_.mkString("").trim.isEmpty)
     //    reader.close()
-//    println(load("competitions.csv"))
+    //    println(load("competitions.csv"))
 
   }
 
@@ -53,6 +53,7 @@ object Csv {
   private val conductingOrganizationsSectionName = "проводящие организации"
   private val judgeSectionName = "судьи"
   private val competitionSectionName = "соревнования"
+  private val stampPropertyName = "печать"
 
   private object CompetitionColumnKey {
     val competition: String = "название соревнования"
@@ -81,6 +82,17 @@ object Csv {
     val all = list.toSet
 
     val required = Set(name, position, qualification)
+  }
+
+  private object SettingsColumnKey {
+    val mandatoryTeam = "команда"
+    val renderPublishProtocol = "протокол для публикации"
+    val filters = "фильтры"
+    val checkControlTime = "проверка кв"
+
+    val list = List(mandatoryTeam, renderPublishProtocol, filters, checkControlTime)
+
+    val all = list.toSet
   }
 
   type Lines = List[List[String]]
@@ -178,6 +190,27 @@ object Csv {
     //    }
   }
 
+  private abstract class Property[A](
+                                      property: String,
+                                      parseValue: Option[String] => A
+                                    ) {
+
+    def unapply(lines: Lines): Option[(A, Lines)] = {
+      lines match {
+        case line :: restLines =>
+          val normalizedLine = normalizeLine(line)
+          normalizedLine
+            .headOption
+            .filter(_.startsWith(property))
+            .map(_ =>
+              (parseValue(normalizedLine.tail.headOption), restLines)
+            )
+        case _ => None
+      }
+    }
+
+  }
+
   private object ConductingOrganizationsSection extends Section(
     sectionName = Some(conductingOrganizationsSectionName),
     uniqueColumns = Set.empty,
@@ -200,11 +233,22 @@ object Csv {
     defaultColumns = CompetitionColumnKey.list,
   )
 
+  private object StampProperty extends Property[Option[String]](
+    property = stampPropertyName,
+    parseValue = value => value
+  )
+
+  private object SettingsSection extends Section(
+    sectionName = Some("параметры"),
+    uniqueColumns = SettingsColumnKey.all,
+    defaultColumns = SettingsColumnKey.list,
+  )
+
   private object NextSection {
 
     def unapply(lines: Lines): Boolean = {
-      Seq(ConductingOrganizationsSection, JudgesSection, CompetitionsSection)
-        .exists(_.unapply(lines).nonEmpty)
+      Seq(ConductingOrganizationsSection, JudgesSection, CompetitionsSection, SettingsSection)
+        .exists(_.unapply(lines).nonEmpty) || StampProperty.unapply(lines).nonEmpty
     }
 
   }
@@ -234,21 +278,28 @@ object Csv {
                lines: Lines,
                conductingOrganizations: List[String],
                judges: List[Judge],
+               stamp: Option[String],
                competitions: List[Competition],
+               settings: CompetitionSettings,
              ): List[Competition] = lines match {
       case EmptyLine(restLines) =>
-        loop0(restLines, conductingOrganizations, judges, competitions)
+        loop0(restLines, conductingOrganizations, judges, stamp, competitions, settings)
+      case StampProperty(stamp, restLines) =>
+        loop0(restLines, conductingOrganizations, judges, stamp, competitions, settings)
       case ConductingOrganizationsSection(_, restLines) =>
         val (conductingOrganizations, restLines2) = readConductingOrganizations(restLines)
-        loop0(restLines2, conductingOrganizations, judges, competitions)
+        loop0(restLines2, conductingOrganizations, judges, stamp, competitions, settings)
       case CompetitionsSection(columns, restLines) =>
-        val (competitions2, restLines2) = readCompetitions(restLines, columns, conductingOrganizations, judges)
-        loop0(restLines2, conductingOrganizations, judges, competitions ++ competitions2)
+        val (competitions2, restLines2) = readCompetitions(restLines, columns, conductingOrganizations, judges, stamp, settings)
+        loop0(restLines2, conductingOrganizations, judges, stamp, competitions ++ competitions2, settings)
       case JudgesSection(columns, restLines) =>
         val (judges2, restLines2) = readJudges(restLines, columns, List.empty)
-        loop0(restLines2, conductingOrganizations, judges2, competitions)
+        loop0(restLines2, conductingOrganizations, judges2, stamp, competitions, settings)
+      case SettingsSection(columns, restLines) =>
+        val (settings2, restLines2) = readSettings(restLines, columns, settings)
+        loop0(restLines2, conductingOrganizations, judges, stamp, competitions, settings2)
       case _ :: restLines =>
-        loop0(restLines, conductingOrganizations, judges, competitions)
+        loop0(restLines, conductingOrganizations, judges, stamp, competitions, settings)
       case Nil =>
         competitions
     }
@@ -314,16 +365,58 @@ object Csv {
 
     }
 
+    def readSettings(
+                      lines: Lines,
+                      columns: List[String],
+                      settings: CompetitionSettings,
+                    ): (CompetitionSettings, Lines) = {
+      lines match {
+        case EmptyLine(restLines) =>
+          readSettings(restLines, columns, settings)
+        case NextSection() =>
+          (settings, lines)
+        case fields :: restLines =>
+          val values = columns.zip(fields).toMap
+          val settings2 = settings
+            .modifyMandatoryTeam(
+              values.get(SettingsColumnKey.mandatoryTeam).map(_.trim).map(Some(_).filter(_.nonEmpty))
+            )
+            .modifyRenderPublicProtocol(
+              values.get(SettingsColumnKey.renderPublishProtocol).map(_.trim.toLowerCase()).map {
+                case "+" | "true" | "да" | "нужно" | "включить" | "on" => true
+                case _ => false
+              }
+            )
+            .modifyApplyFilters(
+              values.get(SettingsColumnKey.filters).map(_.trim.toLowerCase()).map {
+                case "+" | "true" | "да" | "нужно" | "включить" | "on" => true
+                case _ => false
+              }
+            )
+            .modifyCheckControlTime(
+              values.get(SettingsColumnKey.checkControlTime).map(_.trim.toLowerCase()).map {
+                case "+" | "true" | "да" | "нужно" | "включить" | "on" => true
+                case _ => false
+              }
+            )
+          (settings2, restLines)
+        case _ =>
+          (settings, lines)
+      }
+    }
+
     def readCompetitions(
                           lines: Lines,
                           columns: List[String],
                           conductingOrganizations: List[String],
                           judges: List[Judge],
+                          stamp: Option[String],
+                          settings: CompetitionSettings,
                           result: List[Competition] = List.empty,
                         ): (List[Competition], Lines) = {
       lines match {
         case EmptyLine(restLines) =>
-          readCompetitions(restLines, columns, conductingOrganizations, judges, result)
+          readCompetitions(restLines, columns, conductingOrganizations, judges, stamp, settings, result)
         case (head :: _) :: _ if isSectionStart(head) =>
           (result, lines)
         case fields :: restLines =>
@@ -342,14 +435,16 @@ object Csv {
             file = file,
             saveAs = values.get(CompetitionColumnKey.saveAs).map(_.trim).filter(_.nonEmpty).getOrElse(file),
             shortName = values.getOrElse(CompetitionColumnKey.shortName, name),
+            stamp = stamp,
+            settings = settings,
           )
-          readCompetitions(restLines, columns, conductingOrganizations, judges, result :+ competition)
+          readCompetitions(restLines, columns, conductingOrganizations, judges, stamp, settings, result :+ competition)
         case _ =>
           (result, lines)
       }
     }
 
-    loop0(lines, Nil, Nil, Nil)
+    loop0(lines, Nil, Nil, None, Nil, CompetitionSettings())
   }
 
 }
@@ -372,8 +467,43 @@ case class Competition(
                         place: String,
                         file: String,
                         saveAs: String,
+                        stamp: Option[String],
+                        settings: CompetitionSettings,
                       ) {
 
   val maybeYear: Option[Int] = Competition.yearRegex.findFirstIn(date).map(_.toInt)
+
+}
+
+case class CompetitionSettings(
+                                maybeMandatoryTeam: Option[String] = None,
+                                renderPublicProtocol: Boolean = false,
+                                applyFilters: Boolean = true,
+                                checkControlTime: Boolean = true,
+                              ) {
+
+  def modifyMandatoryTeam(maybeMandatoryTeam: Option[Option[String]]): CompetitionSettings = {
+    maybeMandatoryTeam
+      .map(maybeMandatoryTeam => copy(maybeMandatoryTeam = maybeMandatoryTeam))
+      .getOrElse(this)
+  }
+
+  def modifyRenderPublicProtocol(maybeRenderPublicProtocol: Option[Boolean]): CompetitionSettings = {
+    maybeRenderPublicProtocol
+      .map(renderPublicProtocol => copy(renderPublicProtocol = renderPublicProtocol))
+      .getOrElse(this)
+  }
+
+  def modifyApplyFilters(maybeApplyFilters: Option[Boolean]): CompetitionSettings = {
+    maybeApplyFilters
+      .map(applyFilters => copy(applyFilters = applyFilters))
+      .getOrElse(this)
+  }
+
+  def modifyCheckControlTime(maybeCheckControlTime: Option[Boolean]): CompetitionSettings = {
+    maybeCheckControlTime
+      .map(checkControlTime => copy(checkControlTime = checkControlTime))
+      .getOrElse(this)
+  }
 
 }

@@ -4,7 +4,7 @@ import java.io.File
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Document, Element}
-import ru.qwex.mcspr.data.{Application, Applications, Competition}
+import ru.qwex.mcspr.data.{Application, Applications, Competition, CompetitionSettings}
 import ru.qwex.mcspr.model._
 
 import scala.jdk.CollectionConverters._
@@ -46,7 +46,8 @@ class WinOrientTableParser() extends Parser {
           protocolTable = protocolTable,
           distance = distance,
           rawDistanceName = rawDistanceName,
-          applications = sources.applications
+          applications = sources.applications,
+          settings = competition.settings,
         )
 
         ProtocolData(
@@ -115,6 +116,7 @@ class WinOrientTableParser() extends Parser {
                                   distance: Distance,
                                   rawDistanceName: String,
                                   applications: Applications,
+                                  settings: CompetitionSettings,
                                 ) = {
     val columnsNames = protocolTable.select("th").asScala.toList.map(_.text())
     val typedColumns = columnsNames.map(TypedColumn.findTypedColumn) :+ TypedColumn.comment
@@ -134,7 +136,7 @@ class WinOrientTableParser() extends Parser {
 
         val application = findApplication(applications, rawDistanceName, name, teamShort)
 
-        val team = findTeam(application, teamShort)
+        val team = findTeam(application, teamShort, settings.maybeMandatoryTeam)
 
         ProtocolItem.from(
           name = parsedRow.getOrElse(TypedColumn.fullName.typeName, ""),
@@ -209,10 +211,10 @@ object WinOrientTableParser {
                      ) = {
     applications
       .findApplications(rawDistanceName, name)
-      .filter { application =>
-        teamShort
-          .map(_.toLowerCase)
-          .exists(application.team.toLowerCase.startsWith)
+      .filter { application => true
+        //        teamShort
+        //          .map(_.toLowerCase)
+        //          .exists(application.team.toLowerCase.startsWith)
       } match {
       case application :: Nil => Some(application)
       case applications =>
@@ -226,19 +228,22 @@ object WinOrientTableParser {
 
   private val maxWinOrientTeamLength = 20
 
-  def findTeam(application: Option[Application], teamShort: Option[String]): String = {
-    application
-      .map(_.team)
-      .orElse(teamShort.filter(_.length < maxWinOrientTeamLength))
-      .filterNot(_.matches(".*[a-zA-Z].*"))
-      .map(team => if (team.contains(ProtocolItem.personallyTeamName)) ProtocolItem.personallyTeamName else team)
+  def findTeam(application: Option[Application], teamShort: Option[String], maybeMandatoryTeam: Option[String]): String = {
+    maybeMandatoryTeam
+      .orElse(
+        application
+          .map(_.team)
+          .orElse(teamShort.filter(_.length < maxWinOrientTeamLength))
+          .filterNot(_.matches(".*[a-zA-Z].*"))
+          .map(team => if (team.contains(ProtocolItem.personallyTeamName)) ProtocolItem.personallyTeamName else team)
+      )
       .getOrElse(ProtocolItem.personallyTeamName)
   }
 
   def competition2ProtocolHeader(competition: Competition): ProtocolHeader = {
     ProtocolHeader(
       conductingOrganizations = competition.conductingOrganizations,
-      competition = competition.name,
+      competitionParts = competition.name.split("\\\\n").toList.map(_.trim),
       date = Some(competition.date).filter(_.nonEmpty),
       discipline = Some(competition.discipline).filter(_.nonEmpty),
       disciplineCode = Some(competition.disciplineCode).filter(_.nonEmpty),

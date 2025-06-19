@@ -53,7 +53,9 @@ object LayoutCalculator {
       }.sum
 
 
-      val competitionHeight = calculateHeight(protocolData.header.competition, 3)
+      val competitionHeight = protocolData.header.competitionParts.map { competitionPart =>
+        calculateHeight(competitionPart, 3)
+      }.sum
       val competitionDescriptionHeight = calculateHeight("a", 1)
       val placeAndDateDescriptionHeight = calculateHeight("a", 1)
       val titleHeight = styles(2)._2 * 2
@@ -77,7 +79,7 @@ object LayoutCalculator {
     }
 
     val (footerHeight1, footerHeight2) = {
-      val rangingHeight = protocolData.footer.ranking.map(_.lines.length * styles(5)._2).getOrElse(0)
+      val rangingHeight = protocolData.footer.ranking.map(r => (r.lines.length + 1) * styles(5)._2).getOrElse(0)
       (rangingHeight + judgeHeight1, rangingHeight + judgeHeight2)
     }
 

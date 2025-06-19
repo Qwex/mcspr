@@ -1,6 +1,7 @@
 package ru.qwex.mcspr.renders
 
 import java.io.File
+import java.nio.file.{Files, Paths, StandardCopyOption}
 
 import ru.qwex.mcspr.data.Csv
 import ru.qwex.mcspr.model.ProtocolItem.personallyTeamName
@@ -18,10 +19,13 @@ import scala.io.Source
  */
 object DocxRender {
   private val output = "templates/document/word/document.xml"
+  private val stampDir = "templates/document/word/media"
+  private val _relsOutput = "templates/document/word/_rels/document.xml.rels"
 
   private val documentTemplatePath = "templates/documentTemplate.xml"
   private val footerTemplatePath = "templates/footerTemplate.xml"
   private val judgeTemplatePath = "templates/judgeTemplate.xml"
+  private val judgeStampTemplatePath = "templates/judgeStampTemplate.xml"
   private val protocolItemTemplatePath = "templates/protocolItemTemplate.xml"
   private val rankingRowTemplatePath = "templates/rankingRowTemplate.xml"
   private val tableHeaderTemplatePath = "templates/tableHeaderTemplate.xml"
@@ -32,6 +36,8 @@ object DocxRender {
   private val tableTitleTemplatePath = "templates/tableTitleTemplate.xml"
   private val pageSeparatorTemplatePath = "templates/pageSeparatorTemplate.xml"
   private val additionalPageHeaderPath = "templates/additionalPageHeader.xml"
+  private val documentTemplateStampXmlRelsPath = "templates/documentTemplateStamp.xml.rels"
+  private val documentTemplateXmlRelsPath = "templates/documentTemplate.rels"
 
   private val maxWinOrientTeamLength = 20
 
@@ -105,25 +111,58 @@ object DocxRender {
   private val effectivePageWidth = pageWidth - columnGaps
 
 
-  def render(protocols: Seq[ProtocolData]): Unit = {
+  def render(protocols: Seq[ProtocolData], public: Boolean, maybeStamp: Option[String]): Unit = {
+    val maybeStampFile: Option[File] = maybeStamp.map(new File(_)).filter(_.exists()).filter(_.isFile)
     val documentTemplate = loadTemplate(documentTemplatePath)
+    val documentTemplateXmlRels = loadTemplate(maybeStampFile
+      .fold(documentTemplateXmlRelsPath)(_ => documentTemplateStampXmlRelsPath)
+    )
 
-    val renderedProtocols = protocols.map(render)
+    val renderedProtocols = protocols.map(render(_, public, maybeStampFile.nonEmpty))
 
     printToFile(new File(output)) { p =>
       p.println(documentTemplate.replace("${document}",
         List(renderedProtocols).mkString("\n")
       ))
     }
+    printToFile(new File(_relsOutput)) { p =>
+      p.println(
+        maybeStampFile.fold(documentTemplateXmlRels)(stampFile =>
+          documentTemplateXmlRels.replace("${image}", stampFile.getName)
+        )
+      )
+    }
+    Files.list(Paths.get(stampDir))
+      .filter(Files.isRegularFile(_))
+      .forEach(Files.delete(_))
+    maybeStampFile
+      .fold {
+        printToFile(new File(_relsOutput)) { p =>
+          p.println(loadTemplate(documentTemplateXmlRelsPath))
+        }
+      } { stampFile =>
+        Files.copy(
+          stampFile.toPath,
+          new File(s"${stampDir}/${stampFile.getName}").toPath,
+          StandardCopyOption.REPLACE_EXISTING
+        )
+        printToFile(new File(_relsOutput)) { p =>
+          p.println(
+            maybeStampFile.fold(documentTemplateXmlRels)(stampFile =>
+              documentTemplateXmlRels.replace("${image}", stampFile.getName)
+            )
+          )
+        }
+      }
   }
 
-  def render(protocol: ProtocolData): String = {
+  def render(protocol: ProtocolData, public: Boolean, stamp: Boolean): String = {
     val protocolItemTemplate = loadTemplate(protocolItemTemplatePath)
     val tableHeaderTemplate = loadTemplate(tableHeaderTemplatePath)
     val additionalPageHeaderTemplate = loadTemplate(additionalPageHeaderPath)
 
 
-    val widths = calculateWidths(protocol)
+    val widths = calculateWidths(protocol, public)
     val layoutTable = calculateLayoutTable(widths)
 
     val tableHeader = layoutTable.header
@@ -133,7 +172,7 @@ object DocxRender {
 
     def renderPages(protocolData: ProtocolData): String = {
       val renderedHeader = renderHeader(protocol, layout)
-      val renderedJudges = renderJudges(protocolData, 2)
+      val renderedJudges = renderJudges(protocolData, stamp, 2)
       val renderedFooter = renderFooter(protocol, renderedJudges)
 
       def renderPage(
@@ -144,7 +183,7 @@ object DocxRender {
                       prevPlace: Option[Int] = Option.empty,
                     ) = {
         val (renderedProtocolItems, nextPrevPlace, nextPrevProtocolPlace) = protocolItemsRender1(
-          protocolItems.toList, widths, protocolItemTemplate, startI, prevProtocolPlace, prevPlace)
+          protocolItems.toList, widths, protocolItemTemplate, startI, prevProtocolPlace, prevPlace, public)
 
         (List(
           if (pageNum == 1) {
@@ -156,7 +195,7 @@ object DocxRender {
             List(renderedAdditionalPageHeader)
           },
           List(renderedProtocolItems, if (
-            layout.pagesCount == 1 || pageNum == layout.pagesCount)  renderedFooter else renderedJudges
+            layout.pagesCount == 1 || pageNum == layout.pagesCount) renderedFooter else renderedJudges
           ),
         ).flatten.mkString("\n"), nextPrevPlace, nextPrevProtocolPlace)
       }
@@ -218,16 +257,20 @@ object DocxRender {
     val renderedConductingOrganizations = protocolData.header.conductingOrganizations.map(conductingOrganization =>
       conductingOrganizationTemplate.replace("${conductingOrganization}", conductingOrganization)
     ).mkString("\n")
-    val renderCompetition = competitionTemplate.replace(
-      "${competition}", {
-        val competition = protocolData.header.competition
+    val renderCompetition = protocolData.header.competitionParts.map(competitionPart =>
+      competitionTemplate.replace("${competition}", competitionPart)
+    ).mkString("\n")
 
-        val r = "(?i)^(ЧиП|Чемпионат и первенство)\\s+((г|г.|гор.|города)\\s+Москвы)\\s+.*".r
-
-
-        competition
-      }
-    )
+    //    val renderCompetition = competitionTemplate.replace(
+    //      "${competition}", {
+    //        val competition = protocolData.header.competition
+    //
+    //        val r = "(?i)^(ЧиП|Чемпионат и первенство)\\s+((г|г.|гор.|города)\\s+Москвы)\\s+.*".r
+    //
+    //
+    //        competition
+    //      }
+    //    )
 
     val descriptionDatePlace = protocolData.descriptionDatePlace
 
@@ -256,9 +299,10 @@ object DocxRender {
     ).mkString("\n")
   }
 
-  def renderJudges(protocolData: ProtocolData, judgePadding: Int = 2): String = {
+  def renderJudges(protocolData: ProtocolData, stamp: Boolean, judgePadding: Int = 2): String = {
     val pageWidth = 86
     val judgeRowTemplate = loadTemplate(judgeTemplatePath)
+    val judgeStampRowTemplate = loadTemplate(judgeStampTemplatePath)
     val pageSeparatorTemplate = loadTemplate(pageSeparatorTemplatePath)
 
     val emptyRow = judgeRowTemplate.replace("${judge}", "")
@@ -290,11 +334,11 @@ object DocxRender {
     }
 
 
-    val renderedJudges = judges.flatMap(judge =>
-      List(judgeRowTemplate.replace(
+    val renderedJudges = judges.zipWithIndex.flatMap { case (judge, i) =>
+      List((if (i == 0 && stamp) judgeStampRowTemplate else judgeRowTemplate).replace(
         "${judge}", judge
       ), emptyRow)
-    ).dropRight(1).mkString("\n")
+    }.dropRight(1).mkString("\n")
 
     List(
       renderedJudgePadding,
@@ -303,7 +347,7 @@ object DocxRender {
   }
 
   def renderFooter(protocolData: ProtocolData, renderedJudges: String): String = {
-    val judgeRowTemplate = loadTemplate(judgeTemplatePath)
+    val emptyRow = loadTemplate(judgeTemplatePath).replace("${judge}", "")
     val rankingRowTemplate = loadTemplate(rankingRowTemplatePath)
 
     val renderedRanking = protocolData.footer.ranking.map(
@@ -313,6 +357,7 @@ object DocxRender {
     ).getOrElse("")
 
     List(
+      emptyRow,
       renderedRanking,
       renderedJudges
     ).mkString("\n")
@@ -325,7 +370,7 @@ object DocxRender {
     }.toList, pageWidth)
   }
 
-  def calculateWidths(protocol: ProtocolData): Seq[(String, Int, Int, Int)] = {
+  def calculateWidths(protocol: ProtocolData, public: Boolean): Seq[(String, Int, Int, Int)] = {
     val fullNameColumnName = if (protocol.hasPatronymic) {
       fullNameColumnName2
     } else {
@@ -346,7 +391,8 @@ object DocxRender {
     val sportCategoryColumnWidth = 4
     val numberColumnWidth = 4
     val birthdateColumnWidth = protocol.table.foldLeft(6) {
-      case (maxBirthdateWidth, protocolItem) => Math.max(maxBirthdateWidth, protocolItem.birthdate.length)
+      case (maxBirthdateWidth, protocolItem) => Math
+        .max(maxBirthdateWidth, (if (public) protocolItem.yearOfBirth else protocolItem.birthdate).length)
     }
     val resultColumnWidth = 9
     val placeColumnWidth = 5
@@ -363,7 +409,7 @@ object DocxRender {
 
     val teamColumnWidth = Math.min(maxTeamWidth, maxFullNameAndTeamWidth - maxFullNameWidth)
     val fullNameColumnWidth = maxFullNameAndTeamWidth - teamColumnWidth
-    val birthDateColumnName = if (protocol.table.nonEmpty && protocol.table.map(_.birthdate.length).max > 4) {
+    val birthDateColumnName = if (protocol.table.nonEmpty && protocol.table.map(_.birthdate.length).max > 4 && !public) {
       birthDayColumnName
     } else {
       birthYearColumnName
@@ -389,16 +435,16 @@ object DocxRender {
     protocolItem.application.isEmpty
   }
 
-//  private def chooseTeam(protocolItem: ProtocolItem, maxTeamWidth: Int) = {
-//    if (protocolItem.team.length > maxTeamWidth ||
-//      protocolItem.team.contains(personallyTeamName) ||
-//      protocolItem.team.isEmpty
-//    ) {
-//      personallyTeamName
-//    } else {
-//      protocolItem.team
-//    }
-//  }
+  //  private def chooseTeam(protocolItem: ProtocolItem, maxTeamWidth: Int) = {
+  //    if (protocolItem.team.length > maxTeamWidth ||
+  //      protocolItem.team.contains(personallyTeamName) ||
+  //      protocolItem.team.isEmpty
+  //    ) {
+  //      personallyTeamName
+  //    } else {
+  //      protocolItem.team
+  //    }
+  //  }
 
   def protocolItemsRender1(
                             table: List[ProtocolItem],
@@ -406,9 +452,10 @@ object DocxRender {
                             protocolItemTemplate: String,
                             startI: Int = 0,
                             prevProtocolPlace: Int = 1,
-                            prevPlace: Option[Int] = Option.empty
+                            prevPlace: Option[Int] = Option.empty,
+                            public: Boolean = false,
                           ): (String, Option[Int], Int) = {
-    val a = table.zipWithIndex.map{case (item, i) => (item, i + startI)}.foldLeft(
+    val a = table.zipWithIndex.map { case (item, i) => (item, i + startI) }.foldLeft(
       (List.empty[String], prevPlace, prevProtocolPlace)
     ) { case ((rows, prevPlace, prevProtocolPlace), (protocolItem, i)) =>
       val sequenceNumber = i + 1
@@ -418,9 +465,9 @@ object DocxRender {
       val teamWidth = widths(2)._3
       val values = Seq(
         sequenceNumber.toString,
-        protocolItem.fullName,
-//        protocolItem.team,
-//        chooseTeam(protocolItem, teamWidth),
+        if (public) protocolItem.name else protocolItem.fullName,
+        //        protocolItem.team,
+        //        chooseTeam(protocolItem, teamWidth),
         if (
           protocolItem.team.length > teamWidth ||
             protocolItem.team.contains(personallyTeamName) ||
@@ -432,7 +479,7 @@ object DocxRender {
         },
         protocolItem.sportsCategory.getOrElse("б/р"),
         protocolItem.number,
-        protocolItem.birthdate,
+        if (public) protocolItem.yearOfBirth else protocolItem.birthdate,
         protocolItem.result,
         renderedPlace,
       )
@@ -494,9 +541,10 @@ object DocxRender {
         .map(ProtocolItemFilter.filter)
         .map(protocol => protocol.copy(
           table = protocol.table ++ protocol.table ++ protocol.table ++ protocol.table ++ protocol.table
-        ))
+        )),
+      false, None
     )
-//    ZipUtils.zipIt(new File(inputDocx), new File(outputDocx))
+    //    ZipUtils.zipIt(new File(inputDocx), new File(outputDocx))
 
   }
 

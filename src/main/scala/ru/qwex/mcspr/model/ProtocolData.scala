@@ -1,7 +1,7 @@
 package ru.qwex.mcspr.model
 
 import ru.qwex.mcspr.data.{Application, Competition}
-import ru.qwex.mcspr.utils.RegexUtils
+import ru.qwex.mcspr.utils.{DateNormalizer, RegexUtils}
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -17,6 +17,10 @@ case class ProtocolData(
                          table: List[ProtocolItem],
                          footer: ProtocolFooter,
                        ) {
+
+  def calculateRanking(): ProtocolData = {
+    copy(footer = footer.copy(ranking = footer.ranking.map(_.calculate(table))))
+  }
 
   val hasPatronymic: Boolean = table.exists(_.hasPatronymic)
   val hasBirthday: Boolean = table.exists(_.hasPatronymic)
@@ -42,7 +46,7 @@ case class ProtocolData(
 
     val competition = header.competition
     val date = header.date
-    val group = distance.name.toLowerCase()//.replaceAll("\\(|\\)", "")
+    val group = distance.name.toLowerCase() //.replaceAll("\\(|\\)", "")
     val pageDescription = buildPageDescription(pageNum, pagesCount)
     List(
       Some(competition),
@@ -177,21 +181,25 @@ object ProtocolItemFilter {
 
 case class ProtocolHeader(
                            conductingOrganizations: Seq[String],
-                           competition: String,
+                           competitionParts: List[String],
                            date: Option[String],
                            discipline: Option[String],
                            disciplineCode: Option[String],
                            registry: Option[String],
                            place: Option[String],
                            maybeYear: Option[Int] = None,
-                         )
+                         ) {
+
+  val competition: String = competitionParts.mkString(" ")
+
+}
 
 object ProtocolHeader {
 
   def from(competition: Competition): ProtocolHeader = {
     ProtocolHeader(
       conductingOrganizations = competition.conductingOrganizations,
-      competition = competition.name,
+      competitionParts = competition.name.split("\\\\n").toList.map(_.trim),
       date = Some(competition.date).filter(_.nonEmpty),
       discipline = Some(competition.discipline).filter(_.nonEmpty),
       disciplineCode = Some(competition.disciplineCode).filter(_.nonEmpty),
@@ -210,10 +218,12 @@ case class ProtocolFooter(
 
 case class ProtocolItem(
                          fullName: String,
+                         name: String,
                          team: String,
                          sportsCategory: Option[String],
                          number: String,
                          birthdate: String,
+                         yearOfBirth: String,
                          result: String,
                          place: Option[Int],
                          comment: Option[String],
@@ -222,16 +232,17 @@ case class ProtocolItem(
                          outOfCompetition: Boolean,
                          application: Option[Application] = None,
                          maybeYearOfBirth: Option[Int] = None,
+                         maybeResultMs: Option[Int] = None,
                        )
 
 object ProtocolItem {
 
   val personallyTeamName: String = "лично"
 
-  private val patronymicFilterRegex: Regex = s"[${RegexUtils.cyrillicSymbols}]+-?[${RegexUtils.cyrillicSymbols}]+".r
+  private val patronymicFilterRegex: Regex = s"[${RegexUtils.cyrillicSymbols}]+(-[${RegexUtils.cyrillicSymbols}]+)?".r
 
   def patronymicFilter(patronymic: String): Boolean = {
-    patronymicFilterRegex.matches(patronymic)
+    patronymicFilterRegex.matches(patronymic) && patronymic.split("-").forall(_.length >= 3)
   }
 
   //  private val commentRegExp: Regex = s"(\\d\\d\\.\\d\\d\\.*)\\s([${RegexUtils.cyrillicSymbols}]+)".r
@@ -253,12 +264,13 @@ object ProtocolItem {
             place: String,
             comment: Option[String],
             application: Option[Application],
+            maybeResultMs: Option[Int] = None,
           ): ProtocolItem = {
 
 
     val (maybeCommentBirthday, maybeCommentPatronymic) = parseComment(comment)
 
-    val maybeBirthdate = application.flatMap(_.birthdate)
+    val maybeBirthdate = application.flatMap(_.birthdate).flatMap(DateNormalizer.maybeNormalize)
     val birthdate: String = maybeCommentBirthday
       .map(birthday => s"$birthday.$yearOfBirth")
       .orElse(maybeBirthdate)
@@ -284,10 +296,12 @@ object ProtocolItem {
 
     ProtocolItem(
       fullName = fullName,
+      name = name,
       team = team,
       sportsCategory = sportsCategory,
       number = number,
       birthdate = birthdate,
+      yearOfBirth = yearOfBirth,
       result = result,
       place = parsedPlace,
       comment = comment,
@@ -296,6 +310,7 @@ object ProtocolItem {
       outOfCompetition = outOfCompetitionPLaces.contains(place.toLowerCase),
       application = application,
       maybeYearOfBirth = maybeYearOfBirth,
+      maybeResultMs = maybeResultMs,
     )
   }
 
@@ -307,7 +322,33 @@ object ProtocolItem {
 
 }
 
-case class Ranking(lines: List[String])
+trait Ranking {
+  def lines: List[String]
+
+  def calculate(protocolItems: List[ProtocolItem]): Ranking
+}
+
+case class ConstantRanking(lines: List[String]) extends Ranking {
+
+  override def calculate(protocolItems: List[ProtocolItem]): Ranking = this
+
+}
+
+case class ComputableRanking(calculator: List[ProtocolItem] => Ranking) extends Ranking {
+
+  override val lines: List[String] = Ranking.notRanking.lines
+
+  override def calculate(protocolItems: List[ProtocolItem]): Ranking = calculator(protocolItems)
+
+}
+
+object Ranking {
+
+  def apply(lines: List[String]): Ranking = ConstantRanking(lines)
+
+  val notRanking: Ranking = Ranking(List("Ранг не определялся"))
+
+}
 
 case class Judge(
                   name: String,
@@ -323,7 +364,13 @@ case class Distance(
                      isOpen: Boolean = false,
                      isJunior: Boolean = false,
                      maybeMaxAge: Option[Int] = None,
-                   )
+                   ) {
+
+  lazy val controlTimeMs = controlTime.flatMap(ct => Try {
+    ct.toInt
+  }.toOption.map(_ * 60 * 1000))
+
+}
 
 case class Group(
                   name: String,

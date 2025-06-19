@@ -1,3 +1,5 @@
+import ru.qwex.mcspr.utils.RegexUtils
+
 /**
  *
  * @author Aleksander Marenkov <a.marenkov at itgrp.ru>
@@ -21,6 +23,26 @@ object Test {
     } else {
       "балла"
     }
+  }
+
+}
+
+object Test2 {
+
+  def main(args: Array[String]): Unit = {
+    val p = "   Сергеевич-владимирович  "
+    val regex = s"[${RegexUtils.cyrillicSymbols}]+-*[${RegexUtils.cyrillicSymbols}]+".r
+
+    println(regex.matches(p))
+  }
+
+}
+
+object Test3 {
+
+  def main(args: Array[String]): Unit = {
+    val r = "\\d\\d\\d\\d".r
+    println(r.findFirstIn("1 января 2025 г."))
   }
 
 }

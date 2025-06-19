@@ -1,9 +1,10 @@
 package ru.qwex.mcspr.parsers
 
 import play.api.libs.json._
-import ru.qwex.mcspr.data.Competition
+import ru.qwex.mcspr.data.{Competition, CompetitionSettings}
 import ru.qwex.mcspr.model._
 import ru.qwex.mcspr.parsers.WinOrientTableParser.{findApplication, findTeam}
+import ru.qwex.mcspr.ranking.RankCalculator
 import ru.qwex.mcspr.wdb.PysportJsonWdbReader
 
 /**
@@ -34,6 +35,22 @@ class PysportWdbParser extends Parser {
             } yield personGroup.getField[String](idField) == groupId
           }.getOrElse(false)
         }
+        .map { result =>
+          if (competition.settings.checkControlTime) {
+            val maybeResultMs = result.getFieldSafe[Int](resultMsecField)
+            maybeResultMs
+              .filter(resultMs =>
+                distance.controlTimeMs.exists(_ < resultMs)
+              )
+              .filter(_ => result.getFieldSafe[Int](statusField).contains(Statuses.OK))
+              .map(_ => result
+                .updateField[Int](statusField, Statuses.OVERTIME)
+                .updateField[Int](placeField, -1)
+                .updateField[String](resultCurrentField, "Disqualified")
+              )
+              .getOrElse(result)
+          } else result
+        }
         .sorted(resultOrdering)
         .zipWithIndex.map { case (result, index) =>
         val person = result.getField[JsValue](personField)
@@ -46,8 +63,13 @@ class PysportWdbParser extends Parser {
           teamShort <- organization.getFieldSafe[String](nameField)
         } yield teamShort
         val application = findApplication(sources.applications, rawGroupName, name, teamShort)
-        val team = findTeam(application, teamShort)
+        val team = findTeam(application, teamShort, competition.settings.maybeMandatoryTeam)
         val maybePlace = result.getFieldSafe[Int](placeField)
+        val maybeResultMs = for {
+          status <- result.getFieldSafe[Int](statusField)
+          if status == Statuses.OK
+          resultMs <- result.getFieldSafe[Int] (resultMsecField)
+        } yield resultMs
         ProtocolItem.from(
           name = name,
           team = team,
@@ -77,11 +99,12 @@ class PysportWdbParser extends Parser {
             ),
           comment = person.getFieldSafe[String](commentField),
           application = application,
+          maybeResultMs = maybeResultMs,
         )
       }
 
 
-      val ranking = parseRanking(group)
+      val ranking = buildRanking(protocolItems, group)
       ProtocolData(
         header = protocolHeader,
         distance = distance,
@@ -92,6 +115,24 @@ class PysportWdbParser extends Parser {
         ),
       )
     }.filter(data => data.table.nonEmpty)
+  }
+
+  private def buildRanking(protocolItems: List[ProtocolItem], group: JsValue): Ranking = {
+    val ranking = group.getField[JsObject](rankingField)
+    val isActive = ranking.getFieldSafe[Boolean](isActiveField).getOrElse(false)
+    Option
+      .when(isActive) {
+        ComputableRanking {
+          val rank = ranking.getField[List[JsValue]](rankField)
+          val qualNames = rank
+            .filter(_.getField[Boolean](isActiveField))
+            .flatMap(_.getFieldSafe[Int](qualField).filter(_ < 7))
+            .flatMap(qual => Some(qualificationName(qual)).filter(_.nonEmpty))
+
+          { protocolItems => RankCalculator.calculate(qualNames, protocolItems)}
+        }
+      }
+      .getOrElse(Ranking.notRanking)
   }
 
   private def parseRanking(group: JsValue): Ranking = {
@@ -117,7 +158,7 @@ class PysportWdbParser extends Parser {
         Ranking(List(scoresLine) ++ rankLines)
       }
       .filter(_.lines.length > 1)
-      .getOrElse(Ranking(List("Ранг не определялся")))
+      .getOrElse(Ranking.notRanking)
   }
 
   private def declinationScores(scores: Int): String = {
@@ -214,6 +255,10 @@ object PysportWdbParser {
 
     def getPath[T: Reads](subPaths: String*): T = {
       subPaths.foldLeft(json)((obj, subPath) => (obj \ subPath).as[JsObject]).as[T]
+    }
+
+    def updateField[T: Writes](field: String, value: T): JsValue = {
+      json.asOpt[JsObject].map(_ ++ Json.obj(field -> value)).getOrElse(json)
     }
 
   }
@@ -320,6 +365,8 @@ object PysportWdbParser {
       file = "E:\\qwex\\projects\\vk_photo_downloader\\python\\pythonProject1\\Pobedy_20240509_res.wdb",
       //      file = "data.json",
       saveAs = "",
+      stamp = None,
+      settings = CompetitionSettings(),
     )
 
     //    val parser = new PysportWdbParser()
@@ -351,6 +398,15 @@ object PysportWdbParser {
 
   }
 
+  private val qualificationOrder: Map[Int, Int] = Map(
+    4 -> 1,
+    5 -> 2,
+    6 -> 3,
+    1 -> 4,
+    2 -> 5,
+    3 -> 6
+  )
+
   private val qualificationMap: Map[Int, String] = Map(
     //    0 -> "б/р",
     0 -> "",
@@ -370,7 +426,7 @@ object PysportWdbParser {
     Statuses.MISSING_PUNCH -> "3.13.12.2", // MISSING_PUNCH
     Statuses.DID_NOT_FINISH -> "6.6.4", // DID_NOT_FINISH
     Statuses.DID_NOT_START -> "7.2.6", // DID_NOT_START
-    Statuses.OVERTIME -> ".5.4.7", // OVERTIME
+    Statuses.OVERTIME -> "5.4.7", // OVERTIME
     Statuses.MISS_PENALTY_LAP -> "4.6.12.7", // MISS_PENALTY_LAP
   )
 

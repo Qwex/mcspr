@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory
 import ru.qwex.mcspr.data.Csv
 import ru.qwex.mcspr.model.ProtocolItemFilter
 import ru.qwex.mcspr.parsers.AggregateParser
-import ru.qwex.mcspr.renders.{DocxRender, LayoutCalculator}
+import ru.qwex.mcspr.renders.DocxRender
 import ru.qwex.mcspr.utils.ZipUtils
 
 import scala.util.Try
@@ -19,7 +19,7 @@ import scala.util.Try
  * @author Aleksander Marenkov <a.marenkov at itgrp.ru>
  */
 object Boot {
-  private val version = "0.0.1.6"
+  private val version = "0.0.1.9"
 
   private val inputDocx = "templates/document"
 
@@ -75,10 +75,13 @@ object Boot {
                 throw new Exception(s"Не удалось прочитать файл с протоколами!")
             }.get //.getOrElse(Seq.empty)
 
-            DocxRender.render(
-              protocols.filterNot(_.distance.isOpen)
-                .map(ProtocolItemFilter.filter)
-            )
+            val filteredProtocols = protocols.filterNot(_.distance.isOpen)
+              .map(protocol => if (competition.settings.applyFilters) ProtocolItemFilter.filter(protocol) else protocol)
+              .map(_.calculateRanking())
+
+            val maybeStamp = competition.stamp
+
+            DocxRender.render(filteredProtocols, false, maybeStamp)
 
             val outputDocx = buildSaveAs(competition.saveAs, competition.saveAs)
             val outputDocxFile = new File(outputDocx)
@@ -89,6 +92,21 @@ object Boot {
               throw new Exception(
                 s"Не удалось записать файл соревнований \"${competition.name}\": \"${outputDocxFile.getAbsolutePath}\""
               )
+            }
+
+            if (competition.settings.renderPublicProtocol) {
+              DocxRender.render(filteredProtocols, true, maybeStamp)
+              val publicSaveAs = s"${competition.saveAs}_public"
+              val outputDocx = buildSaveAs(publicSaveAs, publicSaveAs)
+              val outputDocxFile = new File(outputDocx)
+              ZipUtils.zipIt(inputDocxFile, outputDocxFile)
+              if (outputDocxFile.exists()) {
+                println(s"Записан файл соревнований \"${competition.name}\" для публикации:  \"${outputDocxFile.getAbsolutePath}\"")
+              } else {
+                throw new Exception(
+                  s"Не удалось записать файл соревнований \"${competition.name}\" для публикации: \"${outputDocxFile.getAbsolutePath}\""
+                )
+              }
             }
           } else {
             println(s"Входной файл для соревнования $competitionName Файл $competitionFilePath не найден!")
