@@ -2,8 +2,10 @@ package ru.qwex.mcspr.parsers
 
 import java.io.File
 
+import com.typesafe.config.Config
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Document, Element}
+import ru.qwex.mcspr.Boot
 import ru.qwex.mcspr.data.{Application, Applications, Competition, CompetitionSettings}
 import ru.qwex.mcspr.model._
 
@@ -107,7 +109,7 @@ class WinOrientTableParser() extends Parser {
       controlTime = distanceAttributes.get("контрольное время"),
       isOpen = group.isOpen,
       isJunior = group.isJunior,
-      maybeMaxAge = group.maybeMaxAge
+      maybeGroupAgeFilter = group.maybeGroupAgeFilter,
     )
   }
 
@@ -291,7 +293,6 @@ object WinOrientTableParser {
       }
     }
 
-
     object Man extends Gender {
       override def mainAgeCategory: (Int, String) = (21, "Мужчины")
 
@@ -338,6 +339,22 @@ object WinOrientTableParser {
     }
   }
 
+  private val groupAgeConstraintsPath: String = "group-age-constraints"
+
+  private val groupAge2GroupAgeFilter = GroupAgeConstraints(Boot.config, groupAgeConstraintsPath).age2groupAgeFilter
+
+//  private val groupAge2GroupAgeFilter: Map[Int, GroupAgeFilter] = Map(
+//    10 -> (9, Some(10)),
+//    12 -> (11, Some(12)),
+//    14 -> (13, Some(14)),
+//    16 -> (15, Some(16)),
+//    18 -> (17, Some(18)),
+//    20 -> (19, Some(20)),
+//    21 -> (21, Some(39))
+//  ).map {
+//    case (age, (minAge, maybeMaxAge)) => age -> GroupAgeFilter(age, minAge, maybeMaxAge)
+//  }
+
   private object Age {
 
     def unapply(age: String): Option[Int] = {
@@ -366,7 +383,7 @@ object WinOrientTableParser {
       }
       maybe1
         .orElse(Genders.find(name).flatMap(_.buildAgeCategory(21)).map((_, false, 21)))
-        .map { case (category, isJunior, age) => Group(category, isJunior = isJunior, maybeAge = Some(age)) }
+        .map { case (category, isJunior, age) => Group(category, isJunior = isJunior, maybeGroupAgeFilter = groupAge2GroupAgeFilter.get(age)) }
         .getOrElse(Group(originalName, isOpen = true))
     }
 
@@ -389,4 +406,39 @@ case class ColumnsNormalization(
   }
 
 }
+
+
+object GroupAgeConstraints {
+  private val minAgePath: String = "min-age"
+  private val maxAgePath: String = "max-age"
+
+  def apply(config: Config, basePath: String): GroupAgeConstraints = {
+    val baseConfig = config.getConfig(basePath)
+    GroupAgeConstraints(
+      age2groupAgeFilter = baseConfig
+        .root()
+        .keySet()
+        .asScala
+        .map { key =>
+          val age = key.toInt
+          age -> parseGroupAgeFilter(age)(baseConfig.getConfig(key))
+        }.toMap
+    )
+  }
+
+  private def parseGroupAgeFilter(age: Int)(config: Config): GroupAgeFilter = {
+    GroupAgeFilter(
+      age = age,
+      minAge = config.getInt(minAgePath),
+      maybeMaxAge = Option.when(config.hasPath(maxAgePath)) {
+        config.getInt(maxAgePath)
+      }
+    )
+  }
+
+}
+
+case class GroupAgeConstraints(
+                                age2groupAgeFilter: Map[Int, GroupAgeFilter],
+                              )
 

@@ -152,16 +152,16 @@ object ProtocolItemFilter {
   private def yearOfBirthFilter(protocolData: ProtocolData): Option[ProtocolItemFilter] = {
     protocolData
       .distance
-      .maybeMaxAge
-      .map(maxAge =>
+      .maybeGroupAgeFilter
+      .map(groupAgeFilter =>
         ProtocolItemFilter(
-          name = "Year of birth filter",
+          name = "Age filter",
           filter = { protocolItem =>
             protocolItem
               .maybeYearOfBirth
               .flatMap(yearOfBirth => protocolData.header.maybeYear.map(_ - yearOfBirth))
-              .exists(_ <= maxAge)
-          },
+              .exists(groupAgeFilter.filter)
+          }
         )
       )
   }
@@ -363,7 +363,7 @@ case class Distance(
                      controlTime: Option[String],
                      isOpen: Boolean = false,
                      isJunior: Boolean = false,
-                     maybeMaxAge: Option[Int] = None,
+                     maybeGroupAgeFilter: Option[GroupAgeFilter],
                    ) {
 
   lazy val controlTimeMs = controlTime.flatMap(ct => Try {
@@ -376,13 +376,14 @@ case class Group(
                   name: String,
                   isOpen: Boolean = false,
                   isJunior: Boolean = false,
-                  maybeAge: Option[Int] = None,
-                ) {
+                  maybeGroupAgeFilter: Option[GroupAgeFilter] = None,
+                )
 
-  val maybeMaxAge: Option[Int] = {
-    Some(39)
-      .filter(_ => maybeAge.contains(21) && !isOpen)
-      .orElse(maybeAge)
+case class GroupAgeFilter(age: Int, minAge: Int, maybeMaxAge: Option[Int]) {
+
+  def filter(age: Int): Boolean = {
+    age >= minAge && maybeMaxAge.forall(age <= _)
   }
 
 }
+

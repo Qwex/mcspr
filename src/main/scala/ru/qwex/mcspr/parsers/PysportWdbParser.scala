@@ -68,7 +68,7 @@ class PysportWdbParser extends Parser {
         val maybeResultMs = for {
           status <- result.getFieldSafe[Int](statusField)
           if status == Statuses.OK
-          resultMs <- result.getFieldSafe[Int] (resultMsecField)
+          resultMs <- result.getFieldSafe[Int](resultMsecField)
         } yield resultMs
         ProtocolItem.from(
           name = name,
@@ -129,7 +129,7 @@ class PysportWdbParser extends Parser {
             .flatMap(_.getFieldSafe[Int](qualField).filter(_ < 7))
             .flatMap(qual => Some(qualificationName(qual)).filter(_.nonEmpty))
 
-          { protocolItems => RankCalculator.calculate(qualNames, protocolItems)}
+          { protocolItems => RankCalculator.calculate(qualNames, protocolItems) }
         }
       }
       .getOrElse(Ranking.notRanking)
@@ -198,7 +198,7 @@ class PysportWdbParser extends Parser {
       controlTime = controlTime.map(_.toString),
       isOpen = _group.isOpen,
       isJunior = _group.isJunior,
-      maybeMaxAge = _group.maybeMaxAge,
+      maybeGroupAgeFilter = _group.maybeGroupAgeFilter,
     )
   }
 
@@ -319,9 +319,9 @@ object PysportWdbParser {
   private def parseRace(json: JsValue): JsObject = {
     val organizations = json.getField[List[JsObject]](organizationsField).sortWith(lt)
     val courses = json.getField[List[JsObject]](coursesField).sortWith(lt)
-    val groups = json.getField[List[JsObject]](groupsField).map { group =>
-      group
-        .addField(courseField, getById(courses, group.getField[String](courseIdField)))
+    val groups = json.getField[List[JsObject]](groupsField).flatMap { group =>
+      group.getFieldSafe[String](courseIdField)
+        .map(courseId => group.addField(courseIdField, getById(courses, courseId)))
     }.sortWith(lt)
     val persons = json.getField[List[JsObject]](personsField)
       .map { person =>

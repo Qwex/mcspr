@@ -18,7 +18,7 @@ object PysportJsonWdbReader {
     read("Примеры протоколов/Pobedy_20240509_res.wdb")
   }
 
-  def read(wdbFilePath: String): JsValue = {
+  def read(wdbFilePath: String, tmpJsonName: String = tmpJsonName): JsValue = {
     val source = Source.fromFile(new File(System.getProperty("user.dir"), "py_wdb_command"))
     val command = source.getLines().mkString(" ").trim
     source.close()

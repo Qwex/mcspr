@@ -19,7 +19,7 @@ import scala.util.Try
  * @author Aleksander Marenkov <a.marenkov at itgrp.ru>
  */
 object Boot {
-  private val version = "0.0.1.9"
+  private val version = "0.0.1.10"
 
   private val inputDocx = "templates/document"
 
@@ -129,8 +129,11 @@ object Boot {
   private val versionKeys = Set("-v", "--version")
 
   private def parseArgs(args: Array[String]): Args = {
-    val printVersion = args.exists(versionKeys.contains)
-    val args2 = args.filterNot(versionKeys.contains)
+    val filteredArgs = args
+      .filterNot(_.startsWith("-D"))
+      .filterNot(_.startsWith("-X"))
+    val printVersion = filteredArgs.exists(versionKeys.contains)
+    val args2 = filteredArgs.filterNot(versionKeys.contains)
     val fileName = args2.headOption
 
     Args(
